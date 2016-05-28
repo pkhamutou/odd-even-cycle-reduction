@@ -1,2 +1,4 @@
-# odd-even-cycle-reduction
-The odd-even cycle reduction for solving tridiagonal systems of linear equations
+# The odd-even cycle reduction
+Write a short C-language program realizing the odd-even reduction for solving tridiagonal systems of linear equations. Program should make use of calculations distributed on the net of computers. 
+Realization in the Open MPI environment. 
+Project task from Parallel Numerical Methods.
