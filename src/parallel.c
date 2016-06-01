@@ -3,16 +3,34 @@
 #include <math.h>
 #include <mpi.h>
 int SIZE;
+
 void print_matrix(double m[5][SIZE]) { 
     int i, j = 0;
-    for (i=0; i<5; i++) {
+    for (i = 0; i < 5; i++) {
         printf("\n\t| "); 
-            for (j=0; j<SIZE; j++) {
+            for (j = 0; j < SIZE; j++) {
                 printf("%2e ", m[i][j]);
             }
         printf("|");
     }
     printf("\n");
+}
+
+int check_size(const int size) {
+    if (size % 2 == 0) {
+        return 1;
+    } else if (size == 3) {
+        return 0;
+    } else {
+        int i;
+        int new_size = 0;
+        for (i = 1; i < size; i++) {
+            if (i % 2 == 0) {
+                new_size++;
+            }
+        }
+        check_size(new_size);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -26,11 +44,22 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &totalnodes);
     MPI_Comm_rank(MPI_COMM_WORLD, &mynode);
-
-    size = (int) pow(2, log2(totalnodes + 1) + 1) - 1;
+    /*
+        size is equal to 2^(log2(totalnodes + 1) + 1) - 1
+        for example for totalnodes equal to 3 we have 2^(log2(3 + 1) + 1) - 1 = 2^3 - 1 = 8 - 1 = 7
+        not all values are allowed. matrix must have size equal to odd integer (1, 3, 5, 7)
+     */
+    size = (int) round(pow(2, log2(totalnodes + 1) + 1) - 1);
     SIZE = size + 1;
-    printf("size = %d\n", size);
-    printf("totalnodes = %d\n", totalnodes);
+    if (mynode == 0) {
+        if (check_size(size) == 1) {
+            printf("Incorrect size: %d\n", size);
+            MPI_Abort(MPI_COMM_WORLD, -1);
+        }
+        printf("A size = %d\n", size);
+        printf("totalnodes = %d\n", totalnodes);
+    }
+
     double A[numrows][size + 1];
     for (i = 0; i < numrows; i++) {
         for (j = 0; j < size + 1; j++) {
@@ -59,9 +88,6 @@ int main(int argc, char *argv[]) {
         A[i][size] = 2 * mynode + i;
     }
 
-    if (mynode == 0) 
-        print_matrix(A);
-
     int numactivep = totalnodes;
     int activep[totalnodes];
     for (j = 0; j < numactivep; j++) {
@@ -73,8 +99,9 @@ int main(int argc, char *argv[]) {
         A[4][j] = A[2][j];
     }
 
-    //if (mynode == 0) 
+    if (mynode == 0) {
         print_matrix(A);
+    }
 
     for (i = 0; i < log2(size + 1) - 1; i++) {
         for (j = 0; j < numactivep; j++) {
