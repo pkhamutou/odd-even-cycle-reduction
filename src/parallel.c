@@ -44,13 +44,8 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &totalnodes);
     MPI_Comm_rank(MPI_COMM_WORLD, &mynode);
-    /*
-        size is equal to 2^(log2(totalnodes + 1) + 1) - 1
-        for example for totalnodes equal to 3 we have 2^(log2(3 + 1) + 1) - 1 = 2^3 - 1 = 8 - 1 = 7
-        not all values are allowed. matrix must have size equal to odd integer (1, 3, 5, 7)
-     */
-    int best_size = (int) round(pow(2, log2(totalnodes + 1) + 1) - 1);
-    size = 6; //(int) round(pow(2, log2(totalnodes + 1) + 1) - 1);
+
+    size = 60;
     SIZE = size + 1;
 
     int p = 0;
@@ -65,20 +60,13 @@ int main(int argc, char *argv[]) {
         MPI_Abort(MPI_COMM_WORLD, -1);
     }
 
-    /*if (mynode == 0) {
-        if (check_size(size) == 1) {
-            printf("Incorrect size: %d\n", size);
-            MPI_Abort(MPI_COMM_WORLD, -1);
-        }
-        printf("A size = %d\n", size);
-        printf("totalnodes = %d\n", totalnodes);
-    }*/
     double A[numrows][size + 1];
     for (i = 0; i < numrows; i++) {
         for (j = 0; j < size + 1; j++) {
             A[i][j] = 0.0;
         }
     }
+
     // filling A matrix
     if (mynode == 0) {
         A[0][0] = 2.0; A[0][1] = 1.0;
@@ -96,19 +84,14 @@ int main(int argc, char *argv[]) {
             A[i][index - 1] = 1.0; A[i][index] = 2.0; A[i][index + 1] = 1.0;
         }
     }
+
     // filling F vector 
     for (i = 0; i < 3; i++) {
-        /*if (mynode == (totalnodes - 1) && i == 2 && size % 2 == 0) {
-            A[i][size] = 0.0;
-        } else {
-            A[i][size] = 2 * mynode + i + 1;
-        }*/
-            A[i][size] = 2 * mynode + i + 1;
+        A[i][size] = 2 * mynode + i + 1;
     }
 
     int numactivep = totalnodes;
     int activep[totalnodes];
-    int lastProcess = totalnodes - 1;
     for (j = 0; j < numactivep; j++) {
         activep[j] = j;
     }
@@ -118,7 +101,7 @@ int main(int argc, char *argv[]) {
         A[4][j] = A[2][j];
     }
 
-    if (mynode == 0 || mynode == 1 || mynode == 2) {
+    if (mynode == 0) {
         //print_matrix(A);
     }
 
@@ -166,7 +149,6 @@ int main(int argc, char *argv[]) {
         for (j = activep[1]; j < totalnodes; j = j + pow(2, i + 1)) {
             activep[numactivep++] = j;
         }
-        lastProcess = activep[numactivep - 1];
     }
 
     double x[totalnodes];
@@ -175,16 +157,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (mynode == activep[0]) {
-        if (check_size(size) == 0) {
-            x[mynode] = A[1][size] / A[1][(size - 1) / 2];
-        } else if (size % 2 == 0 && totalnodes % 2 != 0) {
-            x[mynode] = A[1][size] / A[1][size / 2]; 
-        } else if (size % 2 == 0) {
-            x[mynode] = A[1][size] / A[1][(size - 1)];
-        } else {
-            x[mynode] = A[1][size] / A[1][(size - 2)];
-        }
-        printf("node: %d x[%d]: %e\n", mynode, mynode, x[mynode]);
+		x[mynode] = A[1][size] / A[1][(mynode * 2) + 1];
     }
 
     double tmp;
@@ -205,7 +178,6 @@ int main(int argc, char *argv[]) {
                     }
                 }
                 x[mynode] = x[mynode] / A[1][2 * mynode + 1];
-      //          printf("x[%d]: %e\n", mynode, x[mynode]);
             }
         }
     }
@@ -214,37 +186,32 @@ int main(int argc, char *argv[]) {
     MPI_Allgather(&tmp, 1, MPI_DOUBLE, x, 1, MPI_DOUBLE, MPI_COMM_WORLD);
 
     for (k = 0; k < totalnodes; k++) {
-        if (mynode == 0) {
-            printf("[%d] -> A[0][size]: %e\n",k, A[0][size]);
-            printf("[%d] -> A[0][2 * k + 1]: %e\n",k, A[0][2*k+1]);
-            printf("[%d] -> x[k]: %e\n",k, x[k]);
-            printf("[%d] -> A[0][size]: %e\n", k, A[0][size] - (A[0][2 * k + 1] * x[k]));
-            printf("123: %e\n", (1.000000 - 1.0000000 * 1.0000000));
-        }
-        A[0][size] -= A[0][2 * k + 1] * x[k];
+        A[0][size] -= round(A[0][2 * k + 1] * x[k]);
         if (size % 2 == 0) {
             A[2][size] = 0.0;
         } else {
             A[2][size] -= A[2][2 * k + 1] * x[k];
         }
-        /*if (mynode == 2) {
-            printf("x[%d]: %e\n", k, x[k]);
-            printf("A[0][%d]: %e\n", k, A[0][size]);
-            printf("A[2][%d]: %e\n", k, A[2][size]);
-        }*/
     }
 
     A[0][size] = A[0][size] / A[0][2 * mynode];
     A[1][size] = x[mynode];
+
     if (size % 2 == 0) {
         A[2][size] = 0.0;
     } else {
         A[2][size] = A[2][size] / A[2][2 * mynode + 2];
     }
 
-    for (i = 0; i < 3; i++) {
-        printf("x%d = %e\n", 2 * mynode + i, A[i][size]);
-    }
+	if (mynode == totalnodes - 1) {
+		for (i = 0; i < 3; i++) {
+		    printf("x%d = %e\n", 2 * mynode + i, A[i][size]);
+		}
+	} else {
+		for (i = 0; i < 2; i++) {
+		    printf("x%d = %e\n", 2 * mynode + i, A[i][size]);
+		}
+	}
     
     MPI_Finalize();
     return 0;
